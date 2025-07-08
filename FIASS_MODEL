@@ -1,0 +1,94 @@
+# ✅ STEP 0: Install Required Libraries (Run once in Colab/Local)
+!pip install -q kaggle faiss-cpu sentence-transformers
+
+# ✅ STEP 1: Kaggle Dataset Setup
+!mkdir -p ~/.kaggle
+!cp kaggle.json ~/.kaggle/
+!chmod 600 ~/.kaggle/kaggle.json
+!kaggle datasets download -d stackoverflow/stacksample
+
+# ✅ STEP 2: Extract Dataset
+from zipfile import ZipFile
+with ZipFile('/content/stacksample.zip', 'r') as zip:
+    zip.extractall('/content/stacksample')
+
+# ✅ STEP 3: Load and Merge Data
+import pandas as pd
+questions = pd.read_csv('/content/stacksample/Questions.csv', encoding='latin-1')
+answers = pd.read_csv('/content/stacksample/Answers.csv', encoding='latin-1')
+
+qa = pd.merge(
+    questions[['Id', 'Title', 'Body']],
+    answers[['ParentId', 'Body']],
+    left_on='Id', right_on='ParentId',
+    suffixes=('_question', '_answer')
+)
+
+qa = qa.rename(columns={'Title': 'Question', 'Body_question': 'QuestionBody', 'Body_answer': 'Answer'})
+qa['Question'] = qa['Question'].fillna('') + " " + qa['QuestionBody'].fillna('')
+qa = qa[['Question', 'Answer']].dropna().reset_index(drop=True)
+
+# ✅ STEP 4: Clean Answer HTML
+import re
+def clean_answer_html(text):
+    text = re.sub(r'<[^>]+>', '', text)
+    return re.sub(r'\s+', ' ', text).strip()
+
+qa['Answer'] = qa['Answer'].apply(clean_answer_html)
+
+# ✅ STEP 5: Load SentenceTransformer & Preprocess
+from sentence_transformers import SentenceTransformer
+import numpy as np
+import faiss
+import pickle
+import os
+
+model = SentenceTransformer('all-MiniLM-L6-v2')
+
+# ✅ STEP 6: Embed Questions in Batches (handle 2M efficiently)
+batch_size = 10000
+embeddings = []
+
+for i in range(0, len(qa), batch_size):
+    batch = qa['Question'][i:i+batch_size].tolist()
+    print(f"Embedding batch {i//batch_size + 1}...")
+    emb = model.encode(batch, show_progress_bar=True, normalize_embeddings=True)
+    embeddings.append(emb)
+
+embeddings = np.vstack(embeddings)
+
+# ✅ STEP 7: Save FAISS Index + Data
+index = faiss.IndexFlatIP(embeddings.shape[1])
+index.add(embeddings)
+faiss.write_index(index, "faiss_index.index")
+
+qa.to_pickle("qa_dataset.pkl")
+model.save("embedding_model")
+
+print("✅ Model, index, and dataset saved!")
+
+# ✅ STEP 8: Load & Chat
+def load_all():
+    index = faiss.read_index("faiss_index.index")
+    qa = pd.read_pickle("qa_dataset.pkl")
+    model = SentenceTransformer("embedding_model")
+    return model, index, qa
+
+def chat():
+    model, index, qa = load_all()
+    print("🤖 Tech Chatbot ready! Type 'exit' to quit.")
+    while True:
+        query = input("\nYou: ")
+        if query.lower() == "exit":
+            break
+        try:
+            query_vec = model.encode([query], normalize_embeddings=True)
+            D, I = index.search(np.array(query_vec), k=3)
+            top_answer = qa.iloc[I[0][0]]['Answer']
+            trimmed = '. '.join(top_answer.split('. ')[:3]) + '.'
+            print("\nBot:", trimmed)
+        except Exception as e:
+            print("Bot: Sorry, an error occurred.", e)
+
+# ✅ STEP 9: Start Chat
+chat()
