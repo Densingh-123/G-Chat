@@ -1,0 +1,105 @@
+# ✅ STEP 1: Kaggle Setup (only once)
+!pip install -q kaggle
+!mkdir -p ~/.kaggle
+!cp kaggle.json ~/.kaggle/
+!chmod 600 ~/.kaggle/kaggle.json
+
+# ✅ STEP 2: Download StackSample Dataset
+!kaggle datasets download -d stackoverflow/stacksample
+
+# ✅ STEP 3: Extract the Dataset
+from zipfile import ZipFile
+with ZipFile('/content/stacksample.zip', 'r') as zip:
+    zip.extractall('/content/stacksample')
+print("✅ Dataset extracted")
+
+# ✅ STEP 4: Load and Merge Data
+import pandas as pd
+
+questions = pd.read_csv('/content/stacksample/Questions.csv', encoding='latin-1')
+answers = pd.read_csv('/content/stacksample/Answers.csv', encoding='latin-1')
+
+qa = pd.merge(
+    questions[['Id', 'Title', 'Body']],
+    answers[['ParentId', 'Body']],
+    left_on='Id', right_on='ParentId',
+    suffixes=('_question', '_answer')
+)
+
+qa = qa.rename(columns={'Title': 'Question', 'Body_question': 'QuestionBody', 'Body_answer': 'Answer'})
+qa['Question'] = qa['Question'].fillna('') + " " + qa['QuestionBody'].fillna('')
+qa = qa[['Question', 'Answer']].dropna().reset_index(drop=True)
+
+# ✅ LIMIT dataset to 1000 for speed (you can increase this gradually)
+qa = qa.head(1000000)
+
+# ✅ STEP 5: Preprocess (with safe stemming)
+import re
+import nltk
+from nltk.corpus import stopwords
+from nltk.stem.porter import PorterStemmer
+
+nltk.download('stopwords')
+stop_words = set(stopwords.words('english'))
+stemmer = PorterStemmer()
+
+def safe_stem(word):
+    try:
+        return stemmer.stem(word)
+    except RecursionError:
+        return word[:10]
+
+def preprocess(text):
+    if not isinstance(text, str):
+        return ""
+    text = re.sub(r'<[^>]+>', ' ', text)
+    text = re.sub(r'[^a-zA-Z]', ' ', text).lower()
+    words = text.split()
+    return ' '.join([safe_stem(w) for w in words if w not in stop_words and len(w) > 2])
+
+qa['CleanedQuestion'] = qa['Question'].astype(str).apply(preprocess)
+qa = qa[(qa['CleanedQuestion'] != "") & (qa['Answer'] != "")].reset_index(drop=True)
+
+# ✅ STEP 6: TF-IDF + KNN with bigrams
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.neighbors import NearestNeighbors
+
+vectorizer = TfidfVectorizer(ngram_range=(1, 2))
+X = vectorizer.fit_transform(qa['CleanedQuestion'])
+
+knn = NearestNeighbors(n_neighbors=3, metric='cosine')
+knn.fit(X)
+
+# ✅ STEP 7: Clean HTML from answers
+def clean_answer_html(answer):
+    answer = re.sub(r'<[^>]+>', '', answer)
+    answer = re.sub(r'\s+', ' ', answer).strip()
+    return answer
+
+qa['Answer'] = qa['Answer'].apply(clean_answer_html)
+
+# ✅ STEP 8: Chat Function
+def chat():
+    print("🤖 Tech Chatbot is ready! Type 'exit' to quit.")
+    while True:
+        query = input("You: ")
+        if query.lower() == 'exit':
+            break
+        cleaned = preprocess(query)
+        if cleaned.strip() == "":
+            print("Bot: Sorry, I didn't understand that.")
+            continue
+
+        vect = vectorizer.transform([cleaned])
+        distances, indices = knn.kneighbors(vect)
+
+        # Best answer (first result)
+        top_idx = indices[0][0]
+        top_answer = qa.iloc[top_idx]['Answer']
+
+        # Trim long answers
+        trimmed = '. '.join(top_answer.split('. ')[:3]) + '.'
+        print("\nBot:", trimmed)
+
+# ✅ STEP 9: Start Chatbot
+chat() this is my full code does it have any issues or error it need to work likr realchat gpt model does it work properly with more effeciency 
