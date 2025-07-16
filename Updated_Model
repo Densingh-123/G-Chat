@@ -1,0 +1,118 @@
+# ✅ STEP 1: Final Installation
+# We are now simply upgrading 'bitsandbytes' to the latest version as required by the error message.
+# This ensures full compatibility with the 4-bit model.
+!pip install -q transformers sentence-transformers faiss-cpu accelerate pandas fastparquet
+!pip install -U -q bitsandbytes
+
+from huggingface_hub import login
+
+# --- PASTE YOUR HUGGING FACE TOKEN HERE ---
+hf_token = "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" # Replace with your actual token
+login(token=hf_token)
+
+
+# ✅ STEP 2: Main Application Logic
+import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+from sentence_transformers import SentenceTransformer
+import pandas as pd
+import faiss
+import numpy as np
+import os
+
+# Define file paths for our saved artifacts
+INDEX_PATH = "faiss_index.index"
+DATA_PATH = "qa_dataframe.pkl"
+
+# --- STAGE 1: ONE-TIME SETUP ---
+if not os.path.exists(INDEX_PATH):
+    print("--- Running One-Time Setup ---")
+
+    print("Downloading dataset file directly...")
+    !wget https://huggingface.co/datasets/wiki_qa/resolve/refs%2Fconvert%2Fparquet/default/train/0000.parquet -O wiki_qa_train.parquet
+    print("Download complete.")
+    
+    print("Loading dataset from local file using pandas with fastparquet engine...")
+    df = pd.read_parquet('wiki_qa_train.parquet', engine='fastparquet')
+
+    df = df[['answer']].copy()
+    df = df.drop_duplicates(subset='answer').reset_index(drop=True)
+    df = df.rename(columns={'answer': 'context'})
+    print(f"Dataset prepared with {len(df)} unique context entries.")
+
+    print("Loading retriever model...")
+    retriever = SentenceTransformer('all-MiniLM-L6-v2')
+
+    print("Embedding the knowledge base... (This may take a few minutes)")
+    knowledge_base_embeddings = retriever.encode(df['context'].tolist(), show_progress_bar=True, normalize_embeddings=True)
+    embedding_dim = knowledge_base_embeddings.shape[1]
+    index = faiss.IndexFlatIP(embedding_dim)
+    index.add(knowledge_base_embeddings)
+
+    print(f"Saving FAISS index to {INDEX_PATH}")
+    faiss.write_index(index, INDEX_PATH)
+
+    print(f"Saving DataFrame to {DATA_PATH}")
+    df.to_pickle(DATA_PATH)
+
+    print("--- One-Time Setup Complete! ---")
+else:
+    print("--- Found existing artifacts. Skipping setup. ---")
+
+
+# --- STAGE 2: LOAD MODELS & RUN APPLICATION ---
+print("Loading saved FAISS index and DataFrame...")
+index = faiss.read_index(INDEX_PATH)
+df = pd.read_pickle(DATA_PATH)
+
+print("Loading models into memory...")
+retriever = SentenceTransformer('all-MiniLM-L6-v2')
+
+quantization_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_quant_type="nf4",
+    bnb_4bit_compute_dtype=torch.float16,
+)
+model_id = "mistralai/Mistral-7B-Instruct-v0.2"
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+model = AutoModelForCausalLM.from_pretrained(
+    model_id,
+    quantization_config=quantization_config,
+    device_map="auto"
+)
+print("All models loaded successfully!")
+
+def get_rag_answer(query, k=3):
+    query_embedding = retriever.encode([query], normalize_embeddings=True)
+    D, I = index.search(query_embedding, k)
+    retrieved_contexts = [df['context'].iloc[i] for i in I[0]]
+    context_str = "\n\n".join(retrieved_contexts)
+    
+    prompt_template = f"""
+[INST]
+You are a helpful AI assistant. Answer the user's question based on the following context.
+If the context does not contain the answer, say so. Do not make up information.
+
+Context:
+{context_str}
+
+User's Question: {query}
+[/INST]
+"""
+    inputs = tokenizer(prompt_template, return_tensors="pt").to(model.device)
+    outputs = model.generate(**inputs, max_new_tokens=256, pad_token_id=tokenizer.eos_token_id)
+    answer = tokenizer.decode(outputs[0], skip_special_tokens=True)
+    final_answer = answer.split('[/INST]')[-1].strip()
+    return final_answer
+
+# Start the interactive chat
+print("\n\n🤖 RAG Chatbot is ready! Type 'exit' to quit.")
+while True:
+    user_query = input("\nYou: ")
+    if user_query.lower() == 'exit':
+        break
+    try:
+        response = get_rag_answer(user_query)
+        print("\nBot:", response)
+    except Exception as e:
+        print(f"An error occurred: {e}")
