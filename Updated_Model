@@ -7,7 +7,7 @@
 from huggingface_hub import login
 
 # --- PASTE YOUR HUGGING FACE TOKEN HERE ---
-hf_token = "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" # Replace with your actual token
+hf_token = "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" # Replace with your actual token - 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
 login(token=hf_token)
 
 
