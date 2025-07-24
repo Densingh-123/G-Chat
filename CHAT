@@ -1,0 +1,556 @@
+# ==============================================================================
+#  J.A.R.V.I.S 4.1 - A Personalized AI Assistant (Hacker UI Edition)
+# ==============================================================================
+#
+#  Author: Densingh
+#  Version: 4.1 (Hacker UI Edition)
+#
+# ==============================================================================
+
+import streamlit as st
+import json
+import base64
+import time
+import os
+import sys
+import webbrowser
+import random
+import datetime
+import requests
+import pyautogui
+import psutil
+import speedtest
+from gtts import gTTS
+from audio_recorder_streamlit import audio_recorder
+import speech_recognition as sr
+from pynput.keyboard import Key, Controller as KeyboardController
+import google.generativeai as genai
+import numpy as np
+import pandas as pd
+import wikipedia
+import wolframalpha
+
+# --- Embedded API Keys ---
+GOOGLE_GEMINI_API_KEY = "AIzaSyDtocV5hj33vKT8NiUMUSLQPGtNneAjXcw"
+WOLFRAM_ALPHA_APP_ID = "fa6b4bd3987f4d058564cf9277268913"
+OPENWEATHER_API_KEY = "HA999J8LXK"
+
+# --- Page Configuration ---
+st.set_page_config(
+    page_title="J.A.R.V.I.S 4.1",
+    page_icon="🤖",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
+
+# --- Hacker UI Background ---
+BACKGROUND_IMAGE = "https://cdn.dribbble.com/userupload/32349104/file/still-bb4ca24ed43ac46181878740857a0605.gif?resize=400x0"
+
+# --- Custom UI Styling (Hacker Theme) ---
+def apply_custom_css():
+    hacker_css = f"""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Share+Tech+Mono&display=swap');
+    
+    .stApp {{
+        background-image: url("{BACKGROUND_IMAGE}");
+        background-size: cover;
+        background-position: center;
+        background-attachment: fixed;
+        background-repeat: no-repeat;
+        color: #00ff41 !important;
+    }}
+    
+    .st-emotion-cache-18ni7ap {{
+        background-color: rgba(0, 0, 0, 0.8) !important;
+    }}
+    
+    h1, h2, h3 {{
+        font-family: 'Orbitron', sans-serif;
+        color: #00ff41 !important;
+        text-shadow: 0 0 10px #00ff41, 0 0 20px #00ff41;
+        text-align: center;
+        animation: flicker 2s infinite alternate;
+    }}
+    
+    @keyframes flicker {{
+        0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% {{
+            text-shadow: 0 0 10px #00ff41, 0 0 20px #00ff41;
+            opacity: 1;
+        }}
+        20%, 24%, 55% {{
+            text-shadow: none;
+            opacity: 0.8;
+        }}
+    }}
+    
+    .stChatMessage {{
+        background-color: rgba(0, 20, 0, 0.7) !important;
+        backdrop-filter: blur(10px);
+        border: 1px solid #00ff41 !important;
+        border-radius: 10px;
+        box-shadow: 0 0 15px rgba(0, 255, 65, 0.5);
+        font-family: 'Share Tech Mono', monospace;
+        color: #00ff41 !important;
+    }}
+    
+    .stTextInput > div > div > input, .stTextArea > div > div > textarea {{
+        background-color: rgba(0, 10, 0, 0.8) !important;
+        color: #00ff41 !important;
+        border: 1px solid #00ff41 !important;
+        border-radius: 10px;
+        font-family: 'Share Tech Mono', monospace;
+        height: 100px;
+    }}
+    
+    .stTextInput > div > div > input::placeholder {{
+        color: #008f27 !important;
+    }}
+    
+    .stButton > button {{
+        background-color: rgba(0, 30, 0, 0.8) !important;
+        color: #00ff41 !important;
+        border: 1px solid #00ff41 !important;
+        border-radius: 10px;
+        font-family: 'Share Tech Mono', monospace;
+        transition: all 0.3s ease;
+    }}
+    
+    .stButton > button:hover {{
+        background-color: rgba(0, 50, 0, 0.8) !important;
+        box-shadow: 0 0 15px #00ff41;
+    }}
+    
+    .audio-recorder {{
+        background-color: rgba(0, 30, 0, 0.8) !important;
+        border: 1px solid #00ff41 !important;
+        border-radius: 50px !important;
+        box-shadow: 0 0 10px #00ff41 !important;
+    }}
+    
+    .audio-recorder:hover {{
+        box-shadow: 0 0 15px #00ff41 !important;
+    }}
+    
+    .st-emotion-cache-1c7y2kd {{
+        background-color: rgba(0, 15, 0, 0.8) !important;
+        border: 1px solid #00ff41 !important;
+    }}
+    
+    .mode-selector {{
+        display: flex;
+        justify-content: center;
+        margin: 20px 0;
+    }}
+    
+    .mode-button {{
+        background-color: rgba(0, 30, 0, 0.8);
+        color: #00ff41;
+        border: 1px solid #00ff41;
+        border-radius: 10px;
+        padding: 10px 20px;
+        margin: 0 10px;
+        font-family: 'Share Tech Mono', monospace;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }}
+    
+    .mode-button.active {{
+        background-color: rgba(0, 60, 0, 0.8);
+        box-shadow: 0 0 15px #00ff41;
+    }}
+    
+    .status-bar {{
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background-color: rgba(0, 10, 0, 0.8);
+        border-top: 1px solid #00ff41;
+        padding: 5px 20px;
+        font-family: 'Share Tech Mono', monospace;
+        font-size: 14px;
+        display: flex;
+        justify-content: space-between;
+        z-index: 100;
+    }}
+    
+    audio {{
+        display: none !important;
+    }}
+    
+    .pulse {{
+        animation: pulse 2s infinite;
+    }}
+    
+    @keyframes pulse {{
+        0% {{ opacity: 1; }}
+        50% {{ opacity: 0.5; }}
+        100% {{ opacity: 1; }}
+    }}
+    </style>
+    """
+    st.markdown(hacker_css, unsafe_allow_html=True)
+
+# ==============================================================================
+# --- THE CORE ASSISTANT ENGINE ---
+# ==============================================================================
+class JarvisAssistant:
+    def __init__(self, user_name="Densingh"):
+        self.user_name = user_name
+        self.keyboard = KeyboardController()
+        self.personal_data = self._load_personal_data()
+        self.timetable = self._load_timetable()
+        self.app_map = {"command prompt": "cmd", "paint": "mspaint", "word": "winword", 
+                        "excel": "excel", "chrome": "chrome", "vscode": "code", 
+                        "powerpoint": "powerpnt"}
+        
+        # Configure APIs with embedded keys
+        self.configure_apis(GOOGLE_GEMINI_API_KEY, WOLFRAM_ALPHA_APP_ID, OPENWEATHER_API_KEY)
+
+    def configure_apis(self, gemini_key, wolfram_id, openweather_key):
+        """Configures the assistant with the provided API keys."""
+        self.GOOGLE_GEMINI_API_KEY = gemini_key
+        self.WOLFRAM_ALPHA_APP_ID = wolfram_id
+        self.OPENWEATHER_API_KEY = openweather_key
+        
+        try:
+            if self.GOOGLE_GEMINI_API_KEY:
+                genai.configure(api_key=self.GOOGLE_GEMINI_API_KEY)
+                model = genai.GenerativeModel(
+                    'gemini-1.5-flash',
+                    system_instruction=f"You are JARVIS, a helpful and witty AI assistant for a user named {self.user_name}. Be concise, friendly, and use a futuristic, tech-savvy tone. Your primary goal is to assist the user efficiently."
+                )
+                self.chat = model.start_chat(history=[])
+                return True
+            return False
+        except Exception as e:
+            st.error(f"Failed to initialize Gemini: {e}")
+            return False
+
+    def greet_user(self):
+        hour = datetime.datetime.now().hour
+        if 5 <= hour < 12: greeting = "Good morning"
+        elif 12 <= hour < 18: greeting = "Good afternoon"
+        else: greeting = "Good evening"
+        return f"{greeting}, {self.user_name}. J.A.R.V.I.S. systems are online and ready."
+
+    # --- Main Command Handler ---
+    def handle_command(self, query):
+        query = query.lower().strip()
+        
+        command_map = {
+            "hello": lambda q: f"Hello {self.user_name}, how can I be of service?",
+            "hi": lambda q: f"Hello {self.user_name}, how can I be of service?",
+            "hey": lambda q: f"Hello {self.user_name}, how can I be of service?",
+            "jarvis": lambda q: f"At your service, {self.user_name}.",
+            "schedule": self.get_schedule,
+            "time table": self.get_schedule,
+            "time": lambda q: f"The current time is {datetime.datetime.now().strftime('%I:%M %p')}.",
+            "date": lambda q: f"Today's date is {datetime.datetime.now().strftime('%B %d, %Y')}.",
+            "weather": self.get_weather,
+            "temperature": self.get_weather,
+            "calculate": self.calculate,
+            "google search": lambda q: self.search_web(q.replace("google search", ""), "google"),
+            "youtube": lambda q: self.search_web(q.replace("youtube", ""), "youtube"),
+            "wikipedia": lambda q: self.search_web(q.replace("wikipedia", ""), "wikipedia"),
+            "open": lambda q: self.open_local_app(q.replace("open", "").strip()),
+            "close": lambda q: self.close_local_app(q.replace("close", "").strip()),
+            "screenshot": self.take_screenshot,
+            "volume up": lambda q: self.adjust_volume("up"),
+            "volume down": lambda q: self.adjust_volume("down"),
+            "play": lambda q: self.control_media("playpause"),
+            "pause": lambda q: self.control_media("playpause"),
+            "mute": lambda q: self.control_media("mute"),
+            "speed test": self.run_speed_test,
+            "internet speed": self.run_speed_test,
+            "system info": self.get_system_info,
+        }
+
+        for key, value in self.personal_data.items():
+            if key in query:
+                return value
+        
+        for keyword, func in command_map.items():
+            if keyword in query:
+                return func(query)
+        
+        return self.get_gemini_response(query)
+
+    def get_gemini_response(self, query):
+        if not self.chat:
+            return "Gemini AI is not configured. Please enter the API key in the sidebar."
+        try:
+            response = self.chat.send_message(query)
+            return response.text
+        except Exception as e:
+            return f"An error occurred with the Gemini API: {e}"
+
+    def get_weather(self, query=None):
+        if not self.OPENWEATHER_API_KEY:
+            return "OpenWeatherMap API key is not configured."
+        try:
+            city = "Kilmudalambedu"
+            url = f"http://api.openweathermap.org/data/2.5/weather?q={city}&appid={self.OPENWEATHER_API_KEY}&units=metric"
+            res = requests.get(url).json()
+            if res.get("cod") != 200:
+                return f"Could not retrieve weather for {city}. Error: {res.get('message', 'Unknown Error')}"
+            
+            temp = res["main"]["temp"]
+            description = res["weather"][0]["description"]
+            return f"The current temperature in {city} is {temp}°C with {description}."
+        except Exception as e:
+            return f"Sorry, I couldn't fetch the weather. Error: {e}"
+
+    def calculate(self, query):
+        if not self.WOLFRAM_ALPHA_APP_ID:
+            return "WolframAlpha App ID is not configured."
+        try:
+            client = wolframalpha.Client(self.WOLFRAM_ALPHA_APP_ID)
+            res = client.query(query.replace("calculate", "").strip())
+            answer = next(res.results).text
+            return f"The calculated result is: {answer}."
+        except Exception:
+            return self.get_gemini_response(f"Calculate: {query}")
+            
+    def search_web(self, query, engine):
+        query = query.strip()
+        if engine == "google":
+            webbrowser.open(f"https://www.google.com/search?q={query}")
+            return f"Here are the Google search results for '{query}'."
+        elif engine == "youtube":
+            webbrowser.open(f"https://www.youtube.com/results?search_query={query}")
+            return f"Searching YouTube for '{query}'."
+        elif engine == "wikipedia":
+            try:
+                return self.get_gemini_response(f"Summarize the key points from the Wikipedia page for '{query}' in a concise paragraph.")
+            except Exception as e:
+                return f"I couldn't get a summary for that. Error: {e}"
+
+    def get_schedule(self, query=None):
+        day_name = datetime.datetime.now().strftime('%A').upper()
+        if day_name in self.timetable and self.timetable[day_name]:
+            schedule_text = f"**Schedule for Today ({day_name}):**\n"
+            for period, details in self.timetable[day_name].items():
+                schedule_text += f"- **{details['course']}**: {details['time']} (Period {period})\n"
+            return schedule_text
+        return "You have no classes scheduled for today. Enjoy your day off!"
+
+    def open_local_app(self, app_name):
+        app_cmd = self.app_map.get(app_name)
+        if app_cmd:
+            os.system(f"start {app_cmd}")
+            return f"Affirmative. Launching {app_name}."
+        return f"I don't have a protocol for opening {app_name}, sir."
+
+    def close_local_app(self, app_name):
+        app_cmd = self.app_map.get(app_name)
+        if app_cmd:
+            os.system(f"taskkill /f /im {app_cmd}.exe")
+            return f"Terminating {app_name} process."
+        return f"Unable to specifically close {app_name}."
+
+    def take_screenshot(self, query=None):
+        try:
+            path = os.path.join(os.path.expanduser("~"), "Desktop", f"screenshot_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
+            pyautogui.screenshot(path)
+            return f"Screenshot captured and saved to your desktop."
+        except Exception as e:
+            return f"Failed to capture screenshot: {e}"
+
+    def adjust_volume(self, direction):
+        key = Key.media_volume_up if direction == "up" else Key.media_volume_down
+        for _ in range(5):
+            self.keyboard.press(key); self.keyboard.release(key); time.sleep(0.1)
+        return f"System volume adjusted {direction}."
+
+    def control_media(self, action):
+        if action == "playpause":
+            pyautogui.press("playpause")
+            return "Playback toggled."
+        elif action == "mute":
+            pyautogui.press("volumemute")
+            return "Mute toggled."
+        return ""
+
+    def run_speed_test(self, query=None):
+        st.info("Running internet speed test... This may take a moment.")
+        try:
+            s = speedtest.Speedtest()
+            s.get_best_server()
+            s.download()
+            s.upload()
+            res = s.results.dict()
+            dl_speed = f"{res['download'] / 1_000_000:.2f} Mbps"
+            ul_speed = f"{res['upload'] / 1_000_000:.2f} Mbps"
+            ping = f"{res['ping']:.2f} ms"
+            return f"**Internet Speed Test Results:**\n- **Download:** {dl_speed}\n- **Upload:** {ul_speed}\n- **Ping:** {ping}"
+        except Exception as e:
+            return f"An error occurred during the speed test: {e}"
+            
+    def get_system_info(self, query=None):
+        cpu_usage = psutil.cpu_percent(interval=1)
+        ram_usage = psutil.virtual_memory().percent
+        disk_usage = psutil.disk_usage('/').percent
+        return f"**System Status:**\n- **CPU Load:** {cpu_usage}%\n- **RAM Usage:** {ram_usage}%\n- **Disk Usage:** {disk_usage}%"
+
+    def _load_personal_data(self):
+        return {
+            "full name": "My designation is Densingh D.", "date of birth": "My birthdate is recorded as June 9th, 2005.",
+            "skills": "Your profile indicates proficiency in Java, JavaScript, Python, C, C++, and TypeScript, with experience in frameworks like React, React Native, Spring Boot, and Node.js.",
+            "projects": "You have successfully developed an E-commerce Platform, a Meal-Tracker App, and a Doctor Appointment System.",
+            "gpa": "Your current Grade Point Average is 7.54 out of 10.",
+            "college": "You are enrolled in a B.Tech in Information Technology at R.M.K Engineering College, with an expected graduation in 2026."
+        }
+        
+    def _load_timetable(self):
+        return {
+            "TUESDAY": {"2": {"time": "09:40 - 11:20", "course": "Placement AAL"}, "3": {"time": "11:20 - 12:10", "course": "Placement TAA"}, "5": {"time": "13:50 - 14:40", "course": "Placement KSN"}},
+            "WEDNESDAY": {"1": {"time": "08:50 - 09:40", "course": "Microservice Architecture"}, "2": {"time": "09:40 - 11:20", "course": "Microservice Architecture Lab"}, "5": {"time": "13:50 - 15:30", "course": "Placement TMM"}},
+            "THURSDAY": {"1": {"time": "08:50 - 09:40", "course": "Professional Ethics"}, "3": {"time": "11:20 - 12:10", "course": "Natural Language Processing"}, "5": {"time": "13:50 - 15:30", "course": "Robotic Operating System"}},
+            "FRIDAY": {"1": {"time": "08:50 - 09:40", "course": "Scalable Messaging Infrastructure"}, "2": {"time": "09:40 - 11:20", "course": "Image and Video Analytics"}, "5": {"time": "13:50 - 15:30", "course": "Placement RRJ"}},
+            "SATURDAY": {"1": {"time": "08:50 - 09:40", "course": "Professional Readiness for Innovation"}, "2": {"time": "09:40 - 11:20", "course": "Placement TMM"}, "4": {"time": "12:10 - 13:00", "course": "Library"}, "5": {"time": "13:50 - 15:30", "course": "Placement SSH"}}
+        }
+
+# --- Text-to-Speech & Speech-to-Text Functions ---
+def text_to_speech(text):
+    try:
+        tts = gTTS(text=text, lang='en', tld='co.in', slow=False)
+        audio_fp = "temp_audio.mp3"
+        tts.save(audio_fp)
+        with open(audio_fp, "rb") as f:
+            audio_bytes = f.read()
+        os.remove(audio_fp)
+        return audio_bytes
+    except Exception: return None
+
+def speech_to_text(audio_data):
+    if not audio_data: return ""
+    r = sr.Recognizer()
+    try:
+        # Save audio to file
+        with open("temp_audio.wav", "wb") as f:
+            f.write(audio_data)
+        
+        # Adjust for ambient noise
+        with sr.AudioFile("temp_audio.wav") as source:
+            r.adjust_for_ambient_noise(source, duration=0.5)
+            audio = r.record(source)
+        
+        # Recognize with Google
+        text = r.recognize_google(audio, language='en-in')
+        os.remove("temp_audio.wav")
+        return text
+    except sr.UnknownValueError:
+        return "I couldn't understand the audio. Please try again."
+    except sr.RequestError as e:
+        return f"Could not request results from Google Speech Recognition service; {e}"
+    except Exception as e:
+        return f"An error occurred: {str(e)}"
+
+# ==============================================================================
+# --- MAIN STREAMLIT APP UI ---
+# ==============================================================================
+apply_custom_css()
+
+# --- Session State Initialization ---
+if 'assistant' not in st.session_state:
+    st.session_state.assistant = JarvisAssistant(user_name="Densingh")
+if 'messages' not in st.session_state:
+    st.session_state.messages = [{"role": "assistant", "content": st.session_state.assistant.greet_user()}]
+if 'app_mode' not in st.session_state:
+    st.session_state.app_mode = "Chat Mode"  # Default to Chat Mode
+
+# --- Main Content Area ---
+st.title("J.A.R.V.I.S 4.1")
+st.caption("Just A Rather Very Intelligent System")
+
+# --- Chat History Display ---
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+
+# --- Interaction Mode Selector ---
+st.markdown('<div class="mode-selector">', unsafe_allow_html=True)
+col1, col2 = st.columns(2)
+with col1:
+    chat_active = st.button("💬 Chat Mode", use_container_width=True, 
+                           type="primary" if st.session_state.app_mode == "Chat Mode" else "secondary")
+with col2:
+    voice_active = st.button("🎙️ Voice Mode", use_container_width=True, 
+                            type="primary" if st.session_state.app_mode == "Voice Mode" else "secondary")
+st.markdown('</div>', unsafe_allow_html=True)
+
+if chat_active:
+    st.session_state.app_mode = "Chat Mode"
+if voice_active:
+    st.session_state.app_mode = "Voice Mode"
+
+# --- Input Handling ---
+def process_prompt(prompt):
+    if not prompt.strip():
+        return
+    
+    # Add user message to chat history
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    
+    # Display user message
+    with st.chat_message("user"):
+        st.markdown(prompt)
+    
+    # Generate assistant response
+    with st.chat_message("assistant"):
+        message_placeholder = st.empty()
+        full_response = ""
+        
+        # Simulate streaming response
+        assistant_response = st.session_state.assistant.handle_command(prompt)
+        for chunk in assistant_response.split():
+            full_response += chunk + " "
+            time.sleep(0.05)
+            message_placeholder.markdown(full_response + "▌")
+        message_placeholder.markdown(full_response)
+        
+        # Generate and auto-play audio
+        audio_response = text_to_speech(full_response)
+        if audio_response:
+            st.audio(audio_response, format="audio/mp3", autoplay=True)
+    
+    # Add assistant response to chat history
+    st.session_state.messages.append({"role": "assistant", "content": full_response})
+
+# --- Chat Mode Input ---
+if st.session_state.app_mode == "Chat Mode":
+    if prompt := st.chat_input("What can I help you with, sir?"):
+        process_prompt(prompt)
+
+# --- Voice Mode Input ---
+elif st.session_state.app_mode == "Voice Mode":
+    st.write("Click the microphone and speak your command:")
+    audio_bytes = audio_recorder(
+        pause_threshold=3.0,
+        text="",
+        recording_color="#ff0000",
+        neutral_color="#00ff41",
+        icon_name="microphone",
+        icon_size="3x",
+    )
+    
+    if audio_bytes:
+        with st.spinner("Analyzing audio..."):
+            user_query = speech_to_text(audio_bytes)
+            if user_query and "couldn't understand" not in user_query:
+                process_prompt(user_query)
+            elif user_query:
+                st.error(user_query)
+
+# --- Status Bar ---
+status_bar = f"""
+<div class="status-bar">
+    <div>Status: <span class="pulse">Online</span></div>
+    <div>User: Densingh</div>
+    <div>Mode: {st.session_state.app_mode}</div>
+    <div>{datetime.datetime.now().strftime('%Y-%m-%d | %H:%M:%S')}</div>
+</div>
+"""
+st.markdown(status_bar, unsafe_allow_html=True)
