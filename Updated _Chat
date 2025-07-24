@@ -3,7 +3,7 @@
 # ==============================================================================
 #
 #  Author: Densingh
-#  Version: 4.1 (Hacker UI Edition)
+#  Version: 4.1 (Enhanced Edition)
 #
 # ==============================================================================
 
@@ -246,6 +246,21 @@ def apply_custom_css():
         background-color: #00ff41;
         box-shadow: 0 0 5px #00ff41;
     }}
+    
+    .typing-cursor {{
+        display: inline-block;
+        width: 8px;
+        height: 20px;
+        background-color: #00ff41;
+        animation: blink 1s infinite;
+        margin-left: 4px;
+        vertical-align: middle;
+    }}
+    
+    @keyframes blink {{
+        0%, 100% {{ opacity: 1; }}
+        50% {{ opacity: 0; }}
+    }}
     </style>
     """
     st.markdown(hacker_css, unsafe_allow_html=True)
@@ -257,6 +272,8 @@ class JarvisAssistant:
     def __init__(self, user_name="Densingh"):
         self.user_name = user_name
         self.keyboard = KeyboardController()
+        
+        # Initialize data first
         self.personal_data = self._load_personal_data()
         self.timetable = self._load_timetable()
         self.app_map = {"command prompt": "cmd", "paint": "mspaint", "word": "winword", 
@@ -266,6 +283,25 @@ class JarvisAssistant:
         
         # Configure APIs with embedded keys
         self.configure_apis(GOOGLE_GEMINI_API_KEY, WOLFRAM_ALPHA_APP_ID, OPENWEATHER_API_KEY)
+
+    def _load_personal_data(self):
+        return {
+            "full name": "My designation is Densingh D.", 
+            "date of birth": "My birthdate is recorded as June 9th, 2005.",
+            "skills": "Your profile indicates proficiency in Java, JavaScript, Python, C, C++, and TypeScript, with experience in frameworks like React, React Native, Spring Boot, and Node.js.",
+            "projects": "You have successfully developed an E-commerce Platform, a Meal-Tracker App, and a Doctor Appointment System.",
+            "gpa": "Your current Grade Point Average is 7.54 out of 10.",
+            "college": "You are enrolled in a B.Tech in Information Technology at R.M.K Engineering College, with an expected graduation in 2026."
+        }
+        
+    def _load_timetable(self):
+        return {
+            "TUESDAY": {"2": {"time": "09:40 - 11:20", "course": "Placement AAL"}, "3": {"time": "11:20 - 12:10", "course": "Placement TAA"}, "5": {"time": "13:50 - 14:40", "course": "Placement KSN"}},
+            "WEDNESDAY": {"1": {"time": "08:50 - 09:40", "course": "Microservice Architecture"}, "2": {"time": "09:40 - 11:20", "course": "Microservice Architecture Lab"}, "5": {"time": "13:50 - 15:30", "course": "Placement TMM"}},
+            "THURSDAY": {"1": {"time": "08:50 - 09:40", "course": "Professional Ethics"}, "3": {"time": "11:20 - 12:10", "course": "Natural Language Processing"}, "5": {"time": "13:50 - 15:30", "course": "Robotic Operating System"}},
+            "FRIDAY": {"1": {"time": "08:50 - 09:40", "course": "Scalable Messaging Infrastructure"}, "2": {"time": "09:40 - 11:20", "course": "Image and Video Analytics"}, "5": {"time": "13:50 - 15:30", "course": "Placement RRJ"}},
+            "SATURDAY": {"1": {"time": "08:50 - 09:40", "course": "Professional Readiness for Innovation"}, "2": {"time": "09:40 - 11:20", "course": "Placement TMM"}, "4": {"time": "12:10 - 13:00", "course": "Library"}, "5": {"time": "13:50 - 15:30", "course": "Placement SSH"}}
+        }
 
     def configure_apis(self, gemini_key, wolfram_id, openweather_key):
         """Configures the assistant with the provided API keys."""
@@ -285,6 +321,7 @@ class JarvisAssistant:
             return False
         except Exception as e:
             st.error(f"Failed to initialize Gemini: {e}")
+            self.chat = None
             return False
 
     def greet_user(self):
@@ -329,6 +366,12 @@ class JarvisAssistant:
             "speed test": self.run_speed_test,
             "internet speed": self.run_speed_test,
             "system info": self.get_system_info,
+            "thank you": lambda q: "You're welcome, sir. Always at your service.",
+            "thanks": lambda q: "You're welcome, sir. Always at your service.",
+            "help": lambda q: self.get_help(),
+            "what can you do": lambda q: self.get_help(),
+            "joke": lambda q: self.tell_joke(),
+            "shutdown": lambda q: self.system_shutdown(),
         }
 
         for key, value in self.personal_data.items():
@@ -340,6 +383,47 @@ class JarvisAssistant:
                 return func(query)
         
         return self.get_gemini_response(query)
+
+    def get_help(self):
+        """Returns a list of available commands"""
+        help_text = """
+        **I can assist you with the following:**
+        - Check your class schedule (`schedule` or `time table`)
+        - Get current time and date (`time`, `date`)
+        - Check weather conditions (`weather`)
+        - Perform calculations (`calculate [expression]`)
+        - Web searches (`google [query]`, `youtube [query]`)
+        - Open/close applications (`open [app name]`, `close [app name]`)
+        - Take screenshots (`screenshot`)
+        - Control media (`play`, `pause`, `volume up`, `volume down`)
+        - Run internet speed tests (`speed test`)
+        - Get system information (`system info`)
+        - Tell a joke (`joke`)
+        - Simulate system shutdown (`shutdown`)
+        - And much more using AI capabilities!
+        """
+        return help_text
+
+    def tell_joke(self):
+        jokes = [
+            "Why do programmers prefer dark mode? Because light attracts bugs!",
+            "What do you call a computer that sings? A Dell!",
+            "Why was the JavaScript developer sad? Because he didn't know how to express himself!",
+            "How many programmers does it take to change a light bulb? None, that's a hardware problem!",
+            "Why do Java developers wear glasses? Because they can't C#!"
+        ]
+        return random.choice(jokes)
+
+    def system_shutdown(self):
+        shutdown_sequence = [
+            "Initiating system shutdown protocol",
+            "Saving all active sessions",
+            "Closing network connections",
+            "Terminating background processes",
+            "All systems secured",
+            "Goodbye sir. J.A.R.V.I.S. signing off"
+        ]
+        return "\n".join(shutdown_sequence)
 
     def get_gemini_response(self, query):
         if not self.chat:
@@ -355,7 +439,7 @@ class JarvisAssistant:
             return "OpenWeatherMap API key is not configured."
 
         try:
-            city = "Chennai"  # Try a common valid city first
+            city = "Chennai"  # Default city
             url = f"http://api.openweathermap.org/data/2.5/weather?q={city}&appid={self.OPENWEATHER_API_KEY}&units=metric"
             res = requests.get(url).json()
 
@@ -363,38 +447,14 @@ class JarvisAssistant:
                 return f"Could not retrieve weather for {city}. Error: {res.get('message', 'Unknown Error')}"
 
             temp = res["main"]["temp"]
+            feels_like = res["main"]["feels_like"]
+            humidity = res["main"]["humidity"]
             description = res["weather"][0]["description"]
-            return f"The current temperature in {city} is {temp}°C with {description}."
+            return (f"Weather in {city}: {description.capitalize()}\n"
+                    f"Temperature: {temp}°C (Feels like: {feels_like}°C)\n"
+                    f"Humidity: {humidity}%")
         except Exception as e:
             return f"Sorry, I couldn't fetch the weather. Error: {e}"
-
-def display_weather_or_datetime_box(weather_text):
-    box_css = """
-    <style>
-    .weather-box {
-        position: fixed;
-        bottom: 240px;
-        right: 40px;
-        width: 500px;
-        background-color: rgba(0, 10, 0, 0.85);
-        border: 1px solid #00ff41;
-        border-radius: 10px;
-        padding: 15px;
-        z-index: 1000;
-        font-family: 'Share Tech Mono', monospace;
-        box-shadow: 0 0 15px #00ff41;
-        color: #00ff41;
-    }
-    </style>
-    """
-    st.markdown(box_css, unsafe_allow_html=True)
-    weather_html = f"""
-    <div class="weather-box">
-        <strong>🛰️ Location: Chennai</strong><br>
-        {weather_text}
-    </div>
-    """
-    st.markdown(weather_html, unsafe_allow_html=True)
 
     def calculate(self, query):
         if not self.WOLFRAM_ALPHA_APP_ID:
@@ -497,24 +557,6 @@ def display_weather_or_datetime_box(weather_text):
         disk_usage = psutil.disk_usage('/').percent
         return f"**System Status:**\n- **CPU Load:** {cpu_usage}%\n- **RAM Usage:** {ram_usage}%\n- **Disk Usage:** {disk_usage}%"
 
-    def _load_personal_data(self):
-        return {
-            "full name": "My designation is Densingh D.", "date of birth": "My birthdate is recorded as June 9th, 2005.",
-            "skills": "Your profile indicates proficiency in Java, JavaScript, Python, C, C++, and TypeScript, with experience in frameworks like React, React Native, Spring Boot, and Node.js.",
-            "projects": "You have successfully developed an E-commerce Platform, a Meal-Tracker App, and a Doctor Appointment System.",
-            "gpa": "Your current Grade Point Average is 7.54 out of 10.",
-            "college": "You are enrolled in a B.Tech in Information Technology at R.M.K Engineering College, with an expected graduation in 2026."
-        }
-        
-    def _load_timetable(self):
-        return {
-            "TUESDAY": {"2": {"time": "09:40 - 11:20", "course": "Placement AAL"}, "3": {"time": "11:20 - 12:10", "course": "Placement TAA"}, "5": {"time": "13:50 - 14:40", "course": "Placement KSN"}},
-            "WEDNESDAY": {"1": {"time": "08:50 - 09:40", "course": "Microservice Architecture"}, "2": {"time": "09:40 - 11:20", "course": "Microservice Architecture Lab"}, "5": {"time": "13:50 - 15:30", "course": "Placement TMM"}},
-            "THURSDAY": {"1": {"time": "08:50 - 09:40", "course": "Professional Ethics"}, "3": {"time": "11:20 - 12:10", "course": "Natural Language Processing"}, "5": {"time": "13:50 - 15:30", "course": "Robotic Operating System"}},
-            "FRIDAY": {"1": {"time": "08:50 - 09:40", "course": "Scalable Messaging Infrastructure"}, "2": {"time": "09:40 - 11:20", "course": "Image and Video Analytics"}, "5": {"time": "13:50 - 15:30", "course": "Placement RRJ"}},
-            "SATURDAY": {"1": {"time": "08:50 - 09:40", "course": "Professional Readiness for Innovation"}, "2": {"time": "09:40 - 11:20", "course": "Placement TMM"}, "4": {"time": "12:10 - 13:00", "course": "Library"}, "5": {"time": "13:50 - 15:30", "course": "Placement SSH"}}
-        }
-
 # --- Text-to-Speech & Speech-to-Text Functions ---
 def text_to_speech(text):
     try:
@@ -525,7 +567,8 @@ def text_to_speech(text):
             audio_bytes = f.read()
         os.remove(audio_fp)
         return audio_bytes
-    except Exception: 
+    except Exception as e: 
+        st.error(f"Text-to-speech error: {e}")
         return None
 
 def speech_to_text(audio_data):
@@ -539,7 +582,7 @@ def speech_to_text(audio_data):
         
         # Adjust for ambient noise
         with sr.AudioFile("temp_audio.wav") as source:
-            r.adjust_for_ambient_noise(source, duration=1.0)  # Increased duration
+            r.adjust_for_ambient_noise(source, duration=1.0)
             audio = r.record(source)
         
         # Recognize with Google
@@ -549,9 +592,9 @@ def speech_to_text(audio_data):
     except sr.UnknownValueError:
         return "I couldn't understand the audio. Please try again."
     except sr.RequestError as e:
-        return f"Could not request results from Google Speech Recognition service; {e}"
+        return f"Speech recognition service error: {e}"
     except Exception as e:
-        return f"An error occurred: {str(e)}"
+        return f"Audio processing error: {str(e)}"
 
 # --- System Status Panel ---
 def display_system_status():
@@ -599,11 +642,41 @@ def display_system_status():
 # --- MAIN STREAMLIT APP UI ---
 # ==============================================================================
 apply_custom_css()
+
+# --- Weather/DateTime Display ---
+def display_weather_or_datetime_box(content):
+    box_css = """
+    <style>
+    .weather-box {
+        position: fixed;
+        bottom: 240px;
+        right: 40px;
+        width: 500px;
+        background-color: rgba(0, 10, 0, 0.85);
+        border: 1px solid #00ff41;
+        border-radius: 10px;
+        padding: 15px;
+        z-index: 1000;
+        font-family: 'Share Tech Mono', monospace;
+        box-shadow: 0 0 15px #00ff41;
+        color: #00ff41;
+    }
+    </style>
+    """
+    st.markdown(box_css, unsafe_allow_html=True)
+    weather_html = f"""
+    <div class="weather-box">
+        <strong>🛰️ Location: Chennai</strong><br>
+        {content}
+    </div>
+    """
+    st.markdown(weather_html, unsafe_allow_html=True)
+
 try:
     weather_response = st.session_state.assistant.get_weather()
     if "Could not retrieve weather" in weather_response or "API key" in weather_response:
         raise Exception("Weather unavailable")
-    display_weather_or_datetime_box(weather_response)
+    display_weather_or_datetime_box(weather_response.replace('\n', '<br>'))
 except:
     now = datetime.datetime.now()
     fallback_info = f"""<br>
@@ -612,6 +685,7 @@ except:
         🕓 Day: {now.strftime('%A')}
     """
     display_weather_or_datetime_box(fallback_info)
+
 display_system_status()
 
 # --- Session State Initialization ---
@@ -640,7 +714,7 @@ with col2:
 with col3:
     st.write("")  # Spacer for alignment
     audio_bytes = audio_recorder(
-        pause_threshold=5.0,  # Increased pause threshold
+        pause_threshold=5.0,
         text="",
         recording_color="#ff0000",
         neutral_color="#00ff41",
@@ -682,18 +756,18 @@ def process_prompt(prompt):
         message_placeholder = st.empty()
         full_response = ""
         
-        # Get assistant response in real-time
+        # Get assistant response
         assistant_response = st.session_state.assistant.handle_command(prompt)
         
-        # Stream response word by word
-        for chunk in assistant_response.split():
-            full_response += chunk + " "
-            time.sleep(0.05)
-            message_placeholder.markdown(full_response + "▌")
+        # Stream response with typing animation
+        for char in assistant_response:
+            full_response += char
+            time.sleep(0.02)  # Adjust typing speed
+            message_placeholder.markdown(full_response + "<span class='typing-cursor'></span>", unsafe_allow_html=True)
         
         message_placeholder.markdown(full_response)
         
-        # Generate and play audio for the entire response
+        # Generate and play audio for the response
         audio_response = text_to_speech(full_response)
         if audio_response:
             st.audio(audio_response, format="audio/mp3", autoplay=True)
@@ -714,10 +788,11 @@ if st.session_state.app_mode == "Chat Mode":
 elif st.session_state.app_mode == "Voice Mode" and audio_bytes:
     with st.spinner("Analyzing audio..."):
         user_query = speech_to_text(audio_bytes)
-        if user_query and "couldn't understand" not in user_query:
+        if user_query and "couldn't understand" not in user_query and "error" not in user_query.lower():
             process_prompt(user_query)
         elif user_query:
-            st.error(user_query)
+            with st.chat_message("assistant"):
+                st.error(user_query)
 
 # --- Status Bar ---
 status_bar = f"""
